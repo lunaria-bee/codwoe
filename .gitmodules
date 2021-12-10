@@ -1,0 +1,3 @@
+[submodule "codwoe"]
+	path = codwoe
+	url = git@github.com:TimotheeMickus/codwoe
