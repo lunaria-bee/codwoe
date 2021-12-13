@@ -83,7 +83,7 @@ def preprocess_training_set(dataset, batch_size=128):
 
     print("Indexing glosses")
     v = sorted(list(v))
-    v_dict = {t: i for i, t in enumerate(v)} # faster lookup for token indices
+    v_dict = {t: i for i, t in enumerate(v)} # faster lookup for type indices
     indexed_glosses = []
     for gloss in glosses:
         indexed_glosses.append([v_dict[t] for t in gloss])
