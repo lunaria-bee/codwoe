@@ -31,16 +31,18 @@ class CodwoeTrainingSequence(tf.keras.utils.Sequence):
         for i, gloss in enumerate(self._indexed_glosses[lower_bound:upper_bound]):
             e = self._embeddings[i]
             for j, index in enumerate(gloss[:-1]):
-                input_onehot = get_onehot(self._vocab_size, index)
+                # Concatenate embedding and current step one-hot for x elt
+                input_onehot = create_onehot(self._vocab_size, index)
                 x[i][j] = np.concatenate((e, list(input_onehot)))
 
-                output_onehot = get_onehot(self._vocab_size, gloss[j+1])
+                # Use next step one-hot for y elt
+                output_onehot = create_onehot(self._vocab_size, gloss[j+1])
                 y[i][j] = output_onehot
 
         return x, y
 
 
-def get_onehot(size, index):
+def create_onehot(size, index):
     '''Create a one-hot vector.
 
     Return: Vector with length `size` and `index` set to 1.
