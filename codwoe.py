@@ -97,16 +97,26 @@ training_data_path = sys.argv[1] # TODO use multiple data sources
 with open(training_data_path) as training_data_file:
     training_data = json.load(training_data_file)
 
-sequence, vocabulary = preprocess_training_set(training_data, 128)
+sequence, vocabulary = preprocess_training_set(training_data, 64)
 
-# model = tf.keras.models.Sequential()
-# model.add(tf.keras.layers.LSTM(256, input_shape=(len(x_train[0]), len(x_train[0][0]))))
-# model.add(tf.keras.layers.Dropout(0.2))
-# model.add(tf.keras.layers.Dense(1, activation='softmax'))
-# model.compile(loss='categorical_crossentropy', optimizer='adam')
+x_sample, y_sample = sequence[0]
 
-# model = keras.Model(inputs=inputs, outputs=outputs)
-# model.compile()
-# model.summary()
+print("Building model")
+model = tf.keras.models.Sequential()
+model.add(tf.keras.layers.LSTM(32, input_shape=(x_sample.shape[1], x_sample.shape[2])))
+model.add(tf.keras.layers.RepeatVector(y_sample.shape[1]))
+model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+model.summary()
 
-# dataset = tf.data.Dataset.from_tensor_slices((x_train, y_train))
+print("Fitting model")
+callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(
+        'checkpoints/en-{epoch:02d}-{loss:.4f}.hdf5',
+        monitor='loss',
+        mode='min',
+        save_best_only=True,
+        verbose=1,
+    ),
+]
+model.fit(sequence, epochs=4, batch_size=128, callbacks=callbacks)
