@@ -20,17 +20,17 @@ class CodwoeTrainingSequence(tf.keras.utils.Sequence):
         upper_bound = min(lower_bound + self._batch_size, len(self._embeddings))
 
         x = np.zeros(
-            (self._batch_size, self._max_gloss_length, len(self._embeddings[0])+self._vocab_size),
+            (self._batch_size, self._max_gloss_length-1, len(self._embeddings[0])+self._vocab_size),
             dtype='float32',
         )
         y = np.zeros(
-            (self._batch_size, self._max_gloss_length, self._vocab_size),
+            (self._batch_size, self._max_gloss_length-1, self._vocab_size),
             dtype='float32',
         )
 
         for i, gloss in enumerate(self._indexed_glosses[lower_bound:upper_bound]):
             e = self._embeddings[i]
-            for j, index in enumerate(gloss[:-1]):
+            for j, index in enumerate(gloss[:-1]): # last element of gloss is not in input
                 # Concatenate embedding and current step one-hot for x elt
                 input_onehot = create_onehot(self._vocab_size, index)
                 x[i][j] = np.concatenate((e, list(input_onehot)))
