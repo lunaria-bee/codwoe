@@ -94,6 +94,7 @@ def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
 
 if __name__ == '__main__':
     if sys.argv[1] == 'train':
+        # Interpret CL args
         training_data_path = sys.argv[2]
         embedding_type = sys.argv[3]
         epochs = int(sys.argv[4])
@@ -153,6 +154,7 @@ if __name__ == '__main__':
         model.save(f'{lang}-{embedding_type}-model-{timestr}.h5')
 
     elif sys.argv[1] == 'test':
+        # Interpret CL args
         dev_data_path = sys.argv[2]
         model_path = sys.argv[3]
         # TODO
