@@ -111,6 +111,8 @@ model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='adam')
 model.summary()
 
+del x_sample, y_sample # free memory
+
 print("Fitting model")
 callbacks = [
     tf.keras.callbacks.ModelCheckpoint(
