@@ -119,4 +119,4 @@ callbacks = [
         verbose=1,
     ),
 ]
-model.fit(sequence, epochs=4, batch_size=128, callbacks=callbacks)
+model.fit(sequence, epochs=4, callbacks=callbacks)
