@@ -38,7 +38,7 @@ def preprocess_training_set(dataset, embedding_type='sgns'):
             v.add(token)
 
     print("Arranging inputs and outputs")
-    v = sorted(list())
+    v = sorted(list(v))
     v_dict = {t: i for i, t in enumerate(v)} # faster lookup for type indices
     x = np.zeros((len(dataset), max_gloss_len-1, len(embeddings[0])+1))
     y = np.zeros((len(dataset), max_gloss_len-1))
