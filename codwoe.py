@@ -7,57 +7,7 @@ import tensorflow as tf
 from datetime import datetime
 
 
-class CodwoeTrainingSequence(tf.keras.utils.Sequence):
-    '''Keras sequence for training the codwoe task.'''
-    def __init__(self, embeddings, indexed_glosses, vocab_size, batch_size):
-        self._embeddings = embeddings
-        self._indexed_glosses = indexed_glosses
-        self._max_gloss_length = max(len(g) for g in indexed_glosses)
-        self._vocab_size = vocab_size
-        self._batch_size = batch_size
-
-    def __len__(self):
-        return int(np.ceil(len(self._embeddings) / self._batch_size))
-
-    def __getitem__(self, batch_id):
-        lower_bound = batch_id * self._batch_size
-        upper_bound = min(lower_bound + self._batch_size, len(self._embeddings))
-
-        x = np.zeros(
-            (self._batch_size, self._max_gloss_length-1, len(self._embeddings[0])+self._vocab_size),
-            dtype='float32',
-        )
-        y = np.zeros(
-            (self._batch_size, self._max_gloss_length-1, self._vocab_size),
-            dtype='float32',
-        )
-
-        for i, gloss in enumerate(self._indexed_glosses[lower_bound:upper_bound]):
-            e = self._embeddings[i]
-            for j, index in enumerate(gloss[:-1]): # last element of gloss is not in input
-                # Concatenate embedding and current step one-hot for x elt
-                input_onehot = create_onehot(self._vocab_size, index)
-                x[i][j] = np.concatenate((e, list(input_onehot)))
-
-                # Use next step one-hot for y elt
-                output_onehot = create_onehot(self._vocab_size, gloss[j+1])
-                y[i][j] = output_onehot
-
-        return x, y
-
-
-def create_onehot(size, index):
-    '''Create a one-hot vector.
-
-    Return: Vector with length `size` and `index` set to 1.
-
-    '''
-    onehot = np.zeros(size, dtype='float32')
-    onehot[index] = 1.0
-    return onehot
-
-
-def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
+def preprocess_training_set(dataset, embedding_type='sgns'):
     '''Create a sequence for training, and accumulate a vocabulary.
 
     Return: sequence, vocabulary
@@ -66,6 +16,7 @@ def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
     embeddings = []
     glosses = []
     v = set(['<g>', '</g'])
+    max_gloss_len = 0
     print("Accumulating embeddings and vocabulary")
     for entry in dataset:
         # Build embeddings list
@@ -78,20 +29,26 @@ def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
             + ['</g>']
         )
 
+        # Update max gloss length
+        if len(glosses[-1]) > max_gloss_len:
+            max_gloss_len = len(glosses[-1])
+
         # Accumulate tokens to vocabulary
         for token in glosses[-1]:
             v.add(token)
 
-    print("Indexing glosses")
-    v = sorted(list(v))
+    print("Arranging inputs and outputs")
+    v = sorted(list())
     v_dict = {t: i for i, t in enumerate(v)} # faster lookup for type indices
-    indexed_glosses = []
-    for gloss in glosses:
-        indexed_glosses.append([v_dict[t] for t in gloss])
+    x = np.zeros((len(dataset), max_gloss_len-1, len(embeddings[0])+1))
+    y = np.zeros((len(dataset), max_gloss_len-1))
+    for i, gloss in enumerate(glosses):
+        e = embeddings[i]
+        for j, token in enumerate(gloss[:-1]): # no input for final token
+            x[i][j] = np.concatenate((e, [v_dict[token]]))
+            y[i][j] = v_dict[gloss[j+1]]
 
-    s = CodwoeTrainingSequence(embeddings, indexed_glosses, len(v), batch_size)
-
-    return s, v
+    return x, y, v
 
 
 def create_parser_from_subcommand(subcommand):
@@ -114,8 +71,6 @@ def create_parser_from_subcommand(subcommand):
             file=sys.stderr,
         )
 
-    parser.add_argument('-b', '--batch-size')
-
     return parser
 
 
@@ -125,7 +80,6 @@ def main(argv):
         args = parser.parse_args(argv[2:])
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
-        batch_size = args.batch_size or 64
         epochs = args.epochs or 4
         checkpoint_path = args.checkpoint_path
 
@@ -139,11 +93,7 @@ def main(argv):
             training_data = json.load(training_data_file)
 
         print(f"Training on {embedding_type}")
-        sequence, vocabulary = preprocess_training_set(
-            training_data,
-            embedding_type=embedding_type,
-            batch_size=batch_size,
-        )
+        x_train, y_train, vocabulary = preprocess_training_set(training_data, embedding_type)
 
         if checkpoint_path:
             # Load from checkpoint if available
@@ -152,17 +102,13 @@ def main(argv):
         else:
             # Otherwise build a new model
             print("Building model")
-            x_sample, y_sample = sequence[0]
-            print(f"x dim: ({len(sequence)}, {x_sample.shape[1]}, {x_sample.shape[2]})")
-            print(f"y dim: ({len(sequence)}, {y_sample.shape[1]}, {y_sample.shape[2]})")
+            print(f"x dim: {x_train.shape}")
+            print(f"y dim: {y_train.shape}")
 
             model = tf.keras.models.Sequential()
-            model.add(tf.keras.layers.LSTM(32, input_shape=(x_sample.shape[1], x_sample.shape[2])))
-            model.add(tf.keras.layers.RepeatVector(y_sample.shape[1]))
+            model.add(tf.keras.layers.LSTM(32, input_shape=(x_train.shape[1], x_train.shape[2])))
             model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
-            model.compile(loss='categorical_crossentropy', optimizer='adam')
-
-            del x_sample, y_sample # free memory
+            model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
 
         model.summary()
 
