@@ -177,7 +177,7 @@ def main(argv):
                 verbose=1,
             ),
         ]
-        model.fit(sequence, epochs=4, callbacks=callbacks)
+        model.fit(sequence, epochs=epochs, batch_size=batch_size, callbacks=callbacks)
         model.save(f'{lang}-{embedding_type}-model-{timestr}.h5')
 
     elif argv[1] == 'test':
