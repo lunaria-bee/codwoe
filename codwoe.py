@@ -119,7 +119,12 @@ if __name__ == '__main__':
             batch_size=64,
         )
 
-        if checkpoint_path is None:
+        if checkpoint_path:
+            # Load from checkpoint if available
+            print("Loading model")
+            model = tf.keras.models.load_model(checkpoint_path)
+        else:
+            # Otherwise build a new model
             print("Building model")
             x_sample, y_sample = sequence[0]
             print(f"x dim: ({len(sequence)}, {x_sample.shape[1]}, {x_sample.shape[2]})")
@@ -132,10 +137,6 @@ if __name__ == '__main__':
             model.compile(loss='categorical_crossentropy', optimizer='adam')
 
             del x_sample, y_sample # free memory
-
-        else:
-            print("Loading model")
-            model = tf.keras.models.load_model(checkpoint_path)
 
         model.summary()
 
