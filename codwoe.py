@@ -141,7 +141,7 @@ if __name__ == '__main__':
         model.summary()
 
         print("Fitting model")
-        timestr = datetime.today().strftime("%y%m%d_%H%M%S")
+        timestr = datetime.today().strftime("%y%m%d-%H%M%S")
         callbacks = [
             tf.keras.callbacks.ModelCheckpoint(
                 f'checkpoints/{lang}-{embedding_type}-checkpoint-{{loss:.4f}}-{timestr}.hdf5',
