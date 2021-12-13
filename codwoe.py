@@ -61,7 +61,6 @@ def preprocess_training_set(dataset, batch_size=128):
     '''
     embeddings = []
     glosses = []
-    max_gloss_length = 0
     v = set(['<g>', '</g'])
     print("Accumulating embeddings and vocabulary")
     for entry in dataset:
@@ -74,10 +73,6 @@ def preprocess_training_set(dataset, batch_size=128):
             + entry['gloss'].lower().split()
             + ['</g>']
         )
-
-        # Update max_gloss_length
-        if len(glosses[-1]) > max_gloss_length:
-            max_gloss_length = len(glosses[-1])
 
         # Accumulate tokens to vocabulary
         for token in glosses[-1]:
