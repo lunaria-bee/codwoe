@@ -125,7 +125,7 @@ def main(argv):
         args = parser.parse_args(argv[2:])
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
-        batch_size = args.batch_size or 128
+        batch_size = args.batch_size or 64
         epochs = args.epochs or 4
         checkpoint_path = args.checkpoint_path
 
