@@ -1,8 +1,35 @@
-import json, sys
+#!/usr/bin/env python3
+
+import argparse, json, sys
 import numpy as np
 import tensorflow as tf
 
 from datetime import datetime
+
+
+def create_parser_from_subcommand(subcommand):
+    parser = argparse.ArgumentParser()
+
+    if subcommand == 'train':
+        parser.add_argument('training_data_path')
+        parser.add_argument('embedding_type')
+        parser.add_argument('-e', '--epochs')
+        parser.add_argument('-c', '--checkpoint-path')
+
+    elif subcommand == 'test':
+        parser.add_argument('dev_data_path')
+        parser.add_argument('model_path')
+        parser.add_argument('embedding_type')
+
+    else:
+        print(
+            f"Error: Subcommand must be one of 'test'|'train', not {subcommand}",
+            file=sys.stderr,
+        )
+
+    parser.add_argument('-b', '--batch-size')
+
+    return parser
 
 
 class CodwoeTrainingSequence(tf.keras.utils.Sequence):
@@ -94,16 +121,15 @@ def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
 
 if __name__ == '__main__':
     if sys.argv[1] == 'train':
-        # Interpret CL args
-        training_data_path = sys.argv[2]
-        embedding_type = sys.argv[3]
-        epochs = int(sys.argv[4])
-        if len(sys.argv) > 4:
-            checkpoint_path = sys.argv[5]
-        else:
-            checkpoint_path = None
+        parser = create_parser_from_subcommand('train')
+        args = parser.parse_args(sys.argv[2:])
+        training_data_path = args.training_data_path
+        embedding_type = args.embedding_type
+        batch_size = args.batch_size or 128
+        epochs = args.epochs or 4
+        checkpoint_path = args.checkpoint_path
 
-        if embedding_type not in ('sgns', 'char', 'electra'):
+        if args.embedding_type not in ('sgns', 'char', 'electra'):
             print(f"Error: embedding type must be one of 'sgns'|'char'|'electra', not"
                   + f" {embedding_type}")
 
@@ -116,7 +142,7 @@ if __name__ == '__main__':
         sequence, vocabulary = preprocess_training_set(
             training_data,
             embedding_type=embedding_type,
-            batch_size=64,
+            batch_size=batch_size,
         )
 
         if checkpoint_path:
