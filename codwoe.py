@@ -7,31 +7,6 @@ import tensorflow as tf
 from datetime import datetime
 
 
-def create_parser_from_subcommand(subcommand):
-    parser = argparse.ArgumentParser()
-
-    if subcommand == 'train':
-        parser.add_argument('training_data_path')
-        parser.add_argument('embedding_type')
-        parser.add_argument('-e', '--epochs')
-        parser.add_argument('-c', '--checkpoint-path')
-
-    elif subcommand == 'test':
-        parser.add_argument('dev_data_path')
-        parser.add_argument('model_path')
-        parser.add_argument('embedding_type')
-
-    else:
-        print(
-            f"Error: Subcommand must be one of 'test'|'train', not {subcommand}",
-            file=sys.stderr,
-        )
-
-    parser.add_argument('-b', '--batch-size')
-
-    return parser
-
-
 class CodwoeTrainingSequence(tf.keras.utils.Sequence):
     '''Keras sequence for training the codwoe task.'''
     def __init__(self, embeddings, indexed_glosses, vocab_size, batch_size):
@@ -117,6 +92,31 @@ def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
     s = CodwoeTrainingSequence(embeddings, indexed_glosses, len(v), batch_size)
 
     return s, v
+
+
+def create_parser_from_subcommand(subcommand):
+    parser = argparse.ArgumentParser()
+
+    if subcommand == 'train':
+        parser.add_argument('training_data_path')
+        parser.add_argument('embedding_type')
+        parser.add_argument('-e', '--epochs')
+        parser.add_argument('-c', '--checkpoint-path')
+
+    elif subcommand == 'test':
+        parser.add_argument('dev_data_path')
+        parser.add_argument('model_path')
+        parser.add_argument('embedding_type')
+
+    else:
+        print(
+            f"Error: Subcommand must be one of 'test'|'train', not {subcommand}",
+            file=sys.stderr,
+        )
+
+    parser.add_argument('-b', '--batch-size')
+
+    return parser
 
 
 def main(argv):
