@@ -2,6 +2,8 @@ import json, sys
 import numpy as np
 import tensorflow as tf
 
+from datetime import datetime
+
 
 class CodwoeTrainingSequence(tf.keras.utils.Sequence):
     '''Keras sequence for training the codwoe task.'''
@@ -53,7 +55,7 @@ def create_onehot(size, index):
     return onehot
 
 
-def preprocess_training_set(dataset, batch_size=128):
+def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
     '''Create a sequence for training, and accumulate a vocabulary.
 
     Return: sequence, vocabulary
@@ -65,7 +67,7 @@ def preprocess_training_set(dataset, batch_size=128):
     print("Accumulating embeddings and vocabulary")
     for entry in dataset:
         # Build embeddings list
-        embeddings.append(entry['sgns'])
+        embeddings.append(entry[embedding_type])
 
         # Build glosses list
         glosses.append(
@@ -90,33 +92,67 @@ def preprocess_training_set(dataset, batch_size=128):
     return s, v
 
 
-training_data_path = sys.argv[1] # TODO use multiple data sources
-with open(training_data_path) as training_data_file:
-    training_data = json.load(training_data_file)
+if __name__ == '__main__':
+    if sys.argv[1] == 'train':
+        training_data_path = sys.argv[2]
+        embedding_type = sys.argv[3]
+        epochs = int(sys.argv[4])
+        if len(sys.argv) > 4:
+            checkpoint_path = sys.argv[5]
+        else:
+            checkpoint_path = None
 
-sequence, vocabulary = preprocess_training_set(training_data, 64)
+        if embedding_type not in ('sgns', 'char', 'electra'):
+            print(f"Error: embedding type must be one of 'sgns'|'char'|'electra', not"
+                  + f" {embedding_type}")
 
-print("Building model")
-x_sample, y_sample = sequence[0]
-print(f"x dim: ({len(sequence)}, {x_sample.shape[1]}, {x_sample.shape[2]})")
-print(f"y dim: ({len(sequence)}, {y_sample.shape[1]}, {y_sample.shape[2]})")
-model = tf.keras.models.Sequential()
-model.add(tf.keras.layers.LSTM(32, input_shape=(x_sample.shape[1], x_sample.shape[2])))
-model.add(tf.keras.layers.RepeatVector(y_sample.shape[1]))
-model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
-model.compile(loss='categorical_crossentropy', optimizer='adam')
-model.summary()
+        lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
 
-del x_sample, y_sample # free memory
+        with open(training_data_path) as training_data_file:
+            training_data = json.load(training_data_file)
 
-print("Fitting model")
-callbacks = [
-    tf.keras.callbacks.ModelCheckpoint(
-        'checkpoints/en-{epoch:02d}-{loss:.4f}.hdf5',
-        monitor='loss',
-        mode='min',
-        save_best_only=True,
-        verbose=1,
-    ),
-]
-model.fit(sequence, epochs=4, callbacks=callbacks)
+        print(f"Training on {embedding_type}")
+        sequence, vocabulary = preprocess_training_set(
+            training_data,
+            embedding_type=embedding_type,
+            batch_size=64,
+        )
+
+        if checkpoint_path is None:
+            print("Building model")
+            x_sample, y_sample = sequence[0]
+            print(f"x dim: ({len(sequence)}, {x_sample.shape[1]}, {x_sample.shape[2]})")
+            print(f"y dim: ({len(sequence)}, {y_sample.shape[1]}, {y_sample.shape[2]})")
+
+            model = tf.keras.models.Sequential()
+            model.add(tf.keras.layers.LSTM(32, input_shape=(x_sample.shape[1], x_sample.shape[2])))
+            model.add(tf.keras.layers.RepeatVector(y_sample.shape[1]))
+            model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
+            model.compile(loss='categorical_crossentropy', optimizer='adam')
+
+            del x_sample, y_sample # free memory
+
+        else:
+            print("Loading model")
+            model = tf.keras.models.load_model(checkpoint_path)
+
+        model.summary()
+
+        print("Fitting model")
+        timestr = datetime.today().strftime("%y%m%d-%H%M%S")
+        callbacks = [
+            tf.keras.callbacks.ModelCheckpoint(
+                f'checkpoints/{lang}-{embedding_type}-checkpoint-{{loss:.4f}}-{timestr}.hdf5',
+                monitor='loss',
+                mode='min',
+                save_best_only=True,
+                verbose=1,
+            ),
+        ]
+        model.fit(sequence, epochs=4, callbacks=callbacks)
+        model.save(f'{lang}-{embedding_type}-model-{timestr}.h5')
+
+    elif sys.argv[1] == 'test':
+        dev_data_path = sys.argv[2]
+        model_path = sys.argv[3]
+        # TODO
