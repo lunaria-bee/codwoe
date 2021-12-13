@@ -119,10 +119,10 @@ def preprocess_training_set(dataset, embedding_type='sgns', batch_size=128):
     return s, v
 
 
-if __name__ == '__main__':
-    if sys.argv[1] == 'train':
+def main(argv):
+    if argv[1] == 'train':
         parser = create_parser_from_subcommand('train')
-        args = parser.parse_args(sys.argv[2:])
+        args = parser.parse_args(argv[2:])
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
         batch_size = args.batch_size or 128
@@ -180,8 +180,9 @@ if __name__ == '__main__':
         model.fit(sequence, epochs=4, callbacks=callbacks)
         model.save(f'{lang}-{embedding_type}-model-{timestr}.h5')
 
-    elif sys.argv[1] == 'test':
-        # Interpret CL args
-        dev_data_path = sys.argv[2]
-        model_path = sys.argv[3]
-        # TODO
+    elif argv[1] == 'test':
+        pass # TODO
+
+
+if __name__ == '__main__':
+    main(sys.argv)
