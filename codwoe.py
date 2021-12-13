@@ -101,9 +101,10 @@ with open(training_data_path) as training_data_file:
 
 sequence, vocabulary = preprocess_training_set(training_data, 64)
 
-x_sample, y_sample = sequence[0]
-
 print("Building model")
+x_sample, y_sample = sequence[0]
+print(f"x dim: ({len(sequence)}, {x_sample.shape[1]}, {x_sample.shape[2]})")
+print(f"y dim: ({len(sequence)}, {y_sample.shape[1]}, {y_sample.shape[2]})")
 model = tf.keras.models.Sequential()
 model.add(tf.keras.layers.LSTM(32, input_shape=(x_sample.shape[1], x_sample.shape[2])))
 model.add(tf.keras.layers.RepeatVector(y_sample.shape[1]))
