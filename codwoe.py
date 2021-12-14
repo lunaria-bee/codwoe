@@ -56,23 +56,20 @@ def create_parser_from_subcommand(subcommand):
 
     if subcommand == 'train':
         parser.add_argument('training_data_path')
-        parser.add_argument('embedding_type')
-        parser.add_argument('-m', '--metric')
+        parser.add_argument('embedding_type', choices=('char', 'electra', 'sgns'))
         parser.add_argument('-e', '--epochs', type=int)
         parser.add_argument('-l', '--load')
         parser.add_argument('-o', '--output')
         parser.add_argument('-c', '--checkpoint-output')
 
     elif subcommand == 'test':
-        parser.add_argument('dev_data_path')
         parser.add_argument('model_path')
-        parser.add_argument('embedding_type')
+        parser.add_argument('dev_data_path')
+        parser.add_argument('training_data_path')
+        parser.add_argument('embedding_type', choices=('char', 'electra', 'sgns'))
 
     else:
-        print(
-            f"Error: Subcommand must be one of 'test'|'train', not {subcommand}",
-            file=sys.stderr,
-        )
+        print(f"Error: Subcommand must be one of 'test'|'train', not {subcommand}", file=sys.stderr)
 
     parser.add_argument('-b', '--batch_size', type=int)
 
@@ -90,15 +87,6 @@ def main(argv):
         load_path = args.load
         output_path = args.output or './'
         checkpoint_path = args.checkpoint_output or 'checkpoints/'
-
-        if args.metric == 'loss':
-            training_metric = 'sparse_categorical_crossentropy'
-            monitoring_metric = 'loss'
-            monitoring_mode = 'min'
-        elif args.metric == 'accuracy':
-            training_metric = 'sparse_categorical_accuracy'
-            monitoring_metric = 'accuracy'
-            monitoring_mode = 'max'
 
         lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
 
@@ -141,10 +129,16 @@ def main(argv):
         model.save(f'{output_path}/{lang}-{embedding_type}-model-{timestr}.h5')
 
     elif argv[1] == 'test':
-        pass # TODO
+        parser = create_parser_from_subcommand('test')
+        args = parser.parse_args(argv[2:])
+        model_path = args.model_path
+        dev_data_path = args.dev_data_path
+        training_data_path = args.training_data_path
+        embedding_type = args.embedding_type
+        batch_size = args.batch_size
 
     else:
-        print(f"Subcommand must be one of 'train'|'test', not {argv[1]}", file=sys.stderr)
+        print(f"Error: Subcommand must be one of 'train'|'test', not {argv[1]}", file=sys.stderr)
 
 
 if __name__ == '__main__':
