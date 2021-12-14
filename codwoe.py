@@ -41,12 +41,12 @@ def preprocess_training_set(dataset, embedding_type='sgns'):
     v = sorted(list(v))
     v_dict = {t: i for i, t in enumerate(v)} # faster lookup for type indices
     x = np.zeros((len(dataset), max_gloss_len-1, len(embeddings[0])+1))
-    y = np.zeros((len(dataset), max_gloss_len-1))
+    y = np.zeros((len(dataset), max_gloss_len-1, 1))
     for i, gloss in enumerate(glosses):
         e = embeddings[i]
         for j, token in enumerate(gloss[:-1]): # no input for final token
             x[i][j] = np.concatenate((e, [v_dict[token]]))
-            y[i][j] = v_dict[gloss[j+1]]
+            y[i][j] = np.array([v_dict[gloss[j+1]]])
 
     return x, y, v
 
@@ -57,8 +57,11 @@ def create_parser_from_subcommand(subcommand):
     if subcommand == 'train':
         parser.add_argument('training_data_path')
         parser.add_argument('embedding_type')
-        parser.add_argument('-e', '--epochs')
-        parser.add_argument('-c', '--checkpoint-path')
+        parser.add_argument('-m', '--metric')
+        parser.add_argument('-e', '--epochs', type=int)
+        parser.add_argument('-l', '--load')
+        parser.add_argument('-o', '--output')
+        parser.add_argument('-c', '--checkpoint-output')
 
     elif subcommand == 'test':
         parser.add_argument('dev_data_path')
@@ -71,6 +74,8 @@ def create_parser_from_subcommand(subcommand):
             file=sys.stderr,
         )
 
+    parser.add_argument('-b', '--batch_size', type=int)
+
     return parser
 
 
@@ -80,12 +85,20 @@ def main(argv):
         args = parser.parse_args(argv[2:])
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
-        epochs = args.epochs or 4
-        checkpoint_path = args.checkpoint_path
+        batch_size = args.batch_size or 64
+        epochs = args.epochs or 20
+        load_path = args.load
+        output_path = args.output or './'
+        checkpoint_path = args.checkpoint_output or 'checkpoints/'
 
-        if args.embedding_type not in ('sgns', 'char', 'electra'):
-            print(f"Error: embedding type must be one of 'sgns'|'char'|'electra', not"
-                  + f" {embedding_type}")
+        if args.metric == 'loss':
+            training_metric = 'sparse_categorical_crossentropy'
+            monitoring_metric = 'loss'
+            monitoring_mode = 'min'
+        elif args.metric == 'accuracy':
+            training_metric = 'sparse_categorical_accuracy'
+            monitoring_metric = 'accuracy'
+            monitoring_mode = 'max'
 
         lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
 
@@ -95,39 +108,43 @@ def main(argv):
         print(f"Training on {embedding_type}")
         x_train, y_train, vocabulary = preprocess_training_set(training_data, embedding_type)
 
-        if checkpoint_path:
-            # Load from checkpoint if available
+        if load_path:
+            # Load model/checkpoint from file if available
             print("Loading model")
-            model = tf.keras.models.load_model(checkpoint_path)
+            model = tf.keras.models.load_model(load_path)
         else:
             # Otherwise build a new model
             print("Building model")
-            print(f"x dim: {x_train.shape}")
-            print(f"y dim: {y_train.shape}")
 
             model = tf.keras.models.Sequential()
             model.add(tf.keras.layers.LSTM(32, input_shape=(x_train.shape[1], x_train.shape[2])))
+            model.add(tf.keras.layers.RepeatVector(y_train.shape[1]))
             model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
             model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
 
+        print(f"x dim: {x_train.shape}")
+        print(f"y dim: {y_train.shape}")
         model.summary()
 
         print("Fitting model")
         timestr = datetime.today().strftime("%y%m%d_%H%M%S")
         callbacks = [
             tf.keras.callbacks.ModelCheckpoint(
-                f'checkpoints/{lang}-{embedding_type}-checkpoint-{{loss:.4f}}-{timestr}.hdf5',
+                f'{checkpoint_path}/{lang}-{embedding_type}-checkpoint-{{loss:.4f}}-{timestr}.hdf5',
                 monitor='loss',
                 mode='min',
                 save_best_only=True,
                 verbose=1,
             ),
         ]
-        model.fit(sequence, epochs=epochs, callbacks=callbacks)
-        model.save(f'{lang}-{embedding_type}-model-{timestr}.h5')
+        model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, callbacks=callbacks)
+        model.save(f'{output_path}/{lang}-{embedding_type}-model-{timestr}.h5')
 
     elif argv[1] == 'test':
         pass # TODO
+
+    else:
+        print(f"Subcommand must be one of 'train'|'test', not {argv[1]}", file=sys.stderr)
 
 
 if __name__ == '__main__':
