@@ -7,7 +7,7 @@ import tensorflow as tf
 from datetime import datetime
 
 
-def preprocess_training_set(dataset, embedding_type='sgns'):
+def preprocess_training_set(dataset, embedding_type='sgns', vocabulary=None):
     '''Create a sequence for training, and accumulate a vocabulary.
 
     Return: sequence, vocabulary
@@ -38,15 +38,24 @@ def preprocess_training_set(dataset, embedding_type='sgns'):
             v.add(token)
 
     print("Arranging inputs and outputs")
-    v = sorted(list(v))
+    if vocabulary is not None:
+        v = vocabulary
+    else:
+        v = sorted(list(v))
     v_dict = {t: i for i, t in enumerate(v)} # faster lookup for type indices
     x = np.zeros((len(dataset), max_gloss_len-1, len(embeddings[0])+1))
     y = np.zeros((len(dataset), max_gloss_len-1, 1))
     for i, gloss in enumerate(glosses):
         e = embeddings[i]
         for j, token in enumerate(gloss[:-1]): # no input for final token
-            x[i][j] = np.concatenate((e, [v_dict[token]]))
-            y[i][j] = np.array([v_dict[gloss[j+1]]])
+            if token in v_dict:
+                x[i][j] = np.concatenate((e, [v_dict[token]]))
+            else:
+                x[i][j] = np.concatenate((e, [-1])) # use -1 for OOV tokens
+            if gloss[j+1] in v_dict:
+                y[i][j] = np.array([v_dict[gloss[j+1]]])
+            else:
+                y[i][j] = np.array([-1]) # use -1 for OOV tokens
 
     return x, y, v
 
@@ -136,6 +145,52 @@ def main(argv):
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
         batch_size = args.batch_size
+
+        # Load files
+        model = tf.keras.models.load_model(model_path)
+        model.compile()
+        with open(training_data_path) as training_data_file:
+            training_data = json.load(training_data_file)
+        with open(dev_data_path) as dev_data_file:
+            dev_data = json.load(dev_data_file)
+
+        x_train, y_train, vocabulary = preprocess_training_set(training_data, embedding_type)
+        x_dev, y_target, _ = preprocess_training_set(dev_data, embedding_type, vocabulary)
+
+        initial_token = vocabulary.index('<g>')
+        final_token = vocabulary.index('</g>')
+
+        # Initialize input
+        input_ = np.zeros((x_dev.shape[0], x_train.shape[1], x_dev.shape[2]))
+        for i in range(input_.shape[0]):
+            input_[i][0] = x_dev[i][0]
+
+        # Initialize prediction
+        y_pred = np.zeros((y_target.shape[0], y_train.shape[1], y_target.shape[2]))
+        for i in range(y_pred.shape[0]):
+            y_pred[i][0] = np.array([initial_token])
+
+        del x_train, y_train, _ # free memory
+
+        # Predict
+        finished = set()
+
+        # For each potential gloss element (which is the second dimension of each matrix,
+        # hence iterating on `j` at outer level)s
+        for j in range(x_dev.shape[1]-1):
+            prediction = model.predict(input_, batch_size=batch_size)
+
+            # For each example (which is the first dimension of each matrix, hence
+            # iterating on `i` at the inner level)
+            for i in range(x_dev.shape[0]):
+                # Assign predictions for unfinished glosses
+                if i not in finished:
+                    y_pred[i][j+1] = np.array([numpy.argmax(prediction)])
+                    input_[i][j+1] = np.concatenate((data[i][embedding_type], y_pred[i][j]))
+
+                # Once we reach </g>, mark gloss completed so we stop generating for it
+                if y_pred[i][j+1][0] == final_token:
+                    finished.add(i)
 
     else:
         print(f"Error: Subcommand must be one of 'train'|'test', not {argv[1]}", file=sys.stderr)
