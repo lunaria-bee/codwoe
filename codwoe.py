@@ -8,11 +8,6 @@ from datetime import datetime
 
 
 def preprocess_training_set(dataset, embedding_type='sgns', vocabulary=None):
-    '''Create a sequence for training, and accumulate a vocabulary.
-
-    Return: sequence, vocabulary
-
-    '''
     embeddings = []
     glosses = []
     v = set(['<g>', '</g'])
@@ -147,6 +142,7 @@ def main(argv):
         batch_size = args.batch_size
 
         # Load files
+        print("Loading data")
         model = tf.keras.models.load_model(model_path)
         model.compile()
         with open(training_data_path) as training_data_file:
@@ -161,36 +157,72 @@ def main(argv):
         final_token = vocabulary.index('</g>')
 
         # Initialize input
+        print("Initializing input")
         input_ = np.zeros((x_dev.shape[0], x_train.shape[1], x_dev.shape[2]))
         for i in range(input_.shape[0]):
             input_[i][0] = x_dev[i][0]
 
         # Initialize prediction
+        print("Initializing prediction")
         y_pred = np.zeros((y_target.shape[0], y_train.shape[1], y_target.shape[2]))
         for i in range(y_pred.shape[0]):
             y_pred[i][0] = np.array([initial_token])
 
-        del x_train, y_train, _ # free memory
-
         # Predict
+        print("Predicting")
         finished = set()
 
         # For each potential gloss element (which is the second dimension of each matrix,
-        # hence iterating on `j` at outer level)s
-        for j in range(x_dev.shape[1]-1):
-            prediction = model.predict(input_, batch_size=batch_size)
+        # hence iterating on `j` at outer level)
+        for j in range(x_train.shape[1]-1):
+            print(f"gloss token {j+1}/{x_train.shape[1]-1}")
 
-            # For each example (which is the first dimension of each matrix, hence
-            # iterating on `i` at the inner level)
-            for i in range(x_dev.shape[0]):
-                # Assign predictions for unfinished glosses
-                if i not in finished:
-                    y_pred[i][j+1] = np.array([numpy.argmax(prediction)])
-                    input_[i][j+1] = np.concatenate((data[i][embedding_type], y_pred[i][j]))
+            # Predict in batches to preserve memory
+            batch_count = x_dev.shape[0]//batch_size
+            for batch in range(batch_count):
+                lower_bound = batch*batch_size
+                upper_bound = min(lower_bound+batch_size, x_dev.shape[0])
+                print(f"  batch {batch+1}/{batch_count}, {lower_bound}:{upper_bound}")
+                prediction = model.predict_on_batch(input_[lower_bound:upper_bound])
 
-                # Once we reach </g>, mark gloss completed so we stop generating for it
-                if y_pred[i][j+1][0] == final_token:
-                    finished.add(i)
+                # For each example (which is the first dimension of each matrix, hence
+                # iterating on `i` at the inner level)
+                for i in range(lower_bound, upper_bound):
+                    # Assign predictions for unfinished glosses
+                    if i not in finished:
+                        e = x_dev[i][0][:-1]
+                        y_pred[i][j+1] = np.array([np.argmax(prediction[i-lower_bound][j+1])])
+                        input_[i][j+1] = np.concatenate((e, y_pred[i][j]))
+
+                        # Once we reach </g>, mark gloss completed so we stop generating for it
+                        if y_pred[i][j+1][0] == final_token:
+                            finished.add(i)
+
+        # If any gloss reached the end without predicting </g>, force set last element to </g>
+        for i in range(y_pred.shape[0]):
+            if i not in finished:
+                y_pred[i][-1] = np.array([final_token])
+
+        # Write results
+        output = []
+        for i in range(y_pred.shape[0]):
+           output.append({
+               'id': dev_data[i]['id'],
+               'gloss': ' '.join([vocabulary[int(y[0])] for y in y_pred[i][1:-1]]),
+           })
+
+        output_path = model_path.replace('.h5', '-results.json')
+        with open(output_path, 'w') as f:
+            json.dump(output, f)
+
+        cross_entropy = numpy.mean(
+            tf.keras.metrics.sparse_categorical_crossentropy(
+                y_target,
+                y_pred,
+                from_logits=True,
+            )
+        )
+        print(f"Cross-entropy: {cross_entropy}")
 
     else:
         print(f"Error: Subcommand must be one of 'train'|'test', not {argv[1]}", file=sys.stderr)
