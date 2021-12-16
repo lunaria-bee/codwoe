@@ -7,42 +7,89 @@ import tensorflow as tf
 from datetime import datetime
 
 
-def create_parser_from_subcommand(subcommand):
+def parse_args(argv):
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'subcommand',
+        metavar='subcommand',
+        choices=('train', 'test'),
+        help="Must be one of 'train'|'test'.",
+    )
+    args = parser.parse_args(argv[1:2]) # parse subcommand
 
-    if subcommand == 'train':
-        parser.add_argument('training_data_path')
-        parser.add_argument('embedding_type', choices=('char', 'electra', 'sgns'))
-        parser.add_argument('-e', '--epochs', type=int)
-        parser.add_argument('-l', '--load')
-        parser.add_argument('-o', '--output')
-        parser.add_argument('-c', '--checkpoint-output')
+    if args.subcommand == 'train':
+        parser.add_argument(
+            'training_data_path',
+            help="Path to training data.",
+        )
+        parser.add_argument(
+            'embedding_type',
+            metavar='embedding_type',
+            choices=('char', 'electra', 'sgns'),
+            help="Must be one of 'char'|'electra'|'sgns'.",
+        )
+        parser.add_argument(
+            '-e', '--epochs',
+            type=int,
+            default=20,
+            help="Number of epochs over which to train model. Defaul=20.",
+        )
+        parser.add_argument(
+            '-l', '--load',
+            help="Path to existing model or checkpoint from which to begin training.",
+        )
+        parser.add_argument(
+            '-o', '--output',
+            default='./',
+            help="Path to model output directory. Default='./'.",
+        )
+        parser.add_argument(
+            '-c', '--checkpoint-output',
+            default='checkpoints/',
+            help="Path to checkpoint output directory. Default='checkpoints/'.",
+        )
 
-    elif subcommand == 'test':
-        parser.add_argument('model_path')
-        parser.add_argument('dev_data_path')
-        parser.add_argument('training_data_path')
-        parser.add_argument('embedding_type', choices=('char', 'electra', 'sgns'))
+    elif args.subcommand == 'test':
+        parser.add_argument(
+            'dev_data_path',
+            help="Path to dev test data.",
+        )
+        parser.add_argument(
+            'training_data_path',
+            help="Path to training data.",
+        )
+        parser.add_argument(
+            'model_path',
+            help="Path to model.",
+        )
+        parser.add_argument(
+            'embedding_type',
+            choices=('char', 'electra', 'sgns'),
+            help="Must be one of 'char'|electra'|'sgns'.",
+        )
 
-    else:
-        print(f"Error: Subcommand must be one of 'test'|'train', not {subcommand}", file=sys.stderr)
+    parser.add_argument(
+        '-b', '--batch_size',
+        type=int,
+        default=64,
+        help=("Size of input batches to model. Set to 0 to disable batching (NOT"
+              + " RECOMMENDED). Default=64."),
+    )
 
-    parser.add_argument('-b', '--batch_size', type=int)
-
-    return parser
+    return parser.parse_args(argv[1:])
 
 
 def main(argv):
-    if argv[1] == 'train':
-        parser = create_parser_from_subcommand('train')
-        args = parser.parse_args(argv[2:])
+    args = parse_args(argv)
+
+    if args.subcommand == 'train':
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
-        batch_size = args.batch_size or 64
-        epochs = args.epochs or 20
+        batch_size = args.batch_size
+        epochs = args.epochs
         load_path = args.load
-        output_path = args.output or './'
-        checkpoint_path = args.checkpoint_output or 'checkpoints/'
+        output_path = args.output
+        checkpoint_path = args.checkpoint_output
 
         lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
 
@@ -81,12 +128,12 @@ def main(argv):
                 verbose=1,
             ),
         ]
+        if batch_size == 0:
+            batch_size = x_train.shape[0]
         model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, callbacks=callbacks)
         model.save(f'{output_path}/{lang}-{embedding_type}-model-{timestr}.h5')
 
-    elif argv[1] == 'test':
-        parser = create_parser_from_subcommand('test')
-        args = parser.parse_args(argv[2:])
+    elif args.subcommand == 'test':
         model_path = args.model_path
         dev_data_path = args.dev_data_path
         training_data_path = args.training_data_path
@@ -123,6 +170,9 @@ def main(argv):
         # Predict
         print("Predicting")
         finished = set()
+
+        if batch_size == 0:
+            batch_size = x_dev.shape[0]
 
         # For each potential gloss element (which is the second dimension of each matrix,
         # hence iterating on `j` at outer level)
@@ -175,9 +225,6 @@ def main(argv):
             )
         )
         print(f"Cross-entropy: {cross_entropy}")
-
-    else:
-        print(f"Error: Subcommand must be one of 'train'|'test', not {argv[1]}", file=sys.stderr)
 
 
 if __name__ == '__main__':
