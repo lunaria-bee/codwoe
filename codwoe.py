@@ -7,54 +7,6 @@ import tensorflow as tf
 from datetime import datetime
 
 
-def preprocess_training_set(dataset, embedding_type='sgns', vocabulary=None):
-    embeddings = []
-    glosses = []
-    v = set(['<g>', '</g'])
-    max_gloss_len = 0
-    print("Accumulating embeddings and vocabulary")
-    for entry in dataset:
-        # Build embeddings list
-        embeddings.append(entry[embedding_type])
-
-        # Build glosses list
-        glosses.append(
-            ['<g>']
-            + entry['gloss'].lower().split()
-            + ['</g>']
-        )
-
-        # Update max gloss length
-        if len(glosses[-1]) > max_gloss_len:
-            max_gloss_len = len(glosses[-1])
-
-        # Accumulate tokens to vocabulary
-        for token in glosses[-1]:
-            v.add(token)
-
-    print("Arranging inputs and outputs")
-    if vocabulary is not None:
-        v = vocabulary
-    else:
-        v = sorted(list(v))
-    v_dict = {t: i for i, t in enumerate(v)} # faster lookup for type indices
-    x = np.zeros((len(dataset), max_gloss_len-1, len(embeddings[0])+1))
-    y = np.zeros((len(dataset), max_gloss_len-1, 1))
-    for i, gloss in enumerate(glosses):
-        e = embeddings[i]
-        for j, token in enumerate(gloss[:-1]): # no input for final token
-            if token in v_dict:
-                x[i][j] = np.concatenate((e, [v_dict[token]]))
-            else:
-                x[i][j] = np.concatenate((e, [-1])) # use -1 for OOV tokens
-            if gloss[j+1] in v_dict:
-                y[i][j] = np.array([v_dict[gloss[j+1]]])
-            else:
-                y[i][j] = np.array([-1]) # use -1 for OOV tokens
-
-    return x, y, v
-
-
 def create_parser_from_subcommand(subcommand):
     parser = argparse.ArgumentParser()
 
