@@ -75,6 +75,11 @@ def parse_args(argv):
         help=("Size of input batches to model. Set to 0 to disable batching (NOT"
               + " RECOMMENDED). Default=64."),
     )
+    parser.add_argument(
+        '-j', '--jobs',
+        type=int,
+        help="Maximum number of jobs (i.e. threads) to run simultaneously.",
+    )
 
     return parser.parse_args(argv[1:])
 
@@ -90,6 +95,11 @@ def main(argv):
         load_path = args.load
         output_path = args.output
         checkpoint_path = args.checkpoint_output
+
+        # TODO reimpliment as parser argument action
+        if args.jobs is not None:
+            tf.config.threading.set_intra_op_parallelism_threads(args.jobs)
+            tf.config.threading.set_inter_op_parallelism_threads(args.jobs)
 
         lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
 
@@ -139,6 +149,11 @@ def main(argv):
         training_data_path = args.training_data_path
         embedding_type = args.embedding_type
         batch_size = args.batch_size
+
+        # TODO reimpliment as parser argument action
+        if args.jobs is not None:
+            tf.config.threading.set_intra_op_parallelism_threads(args.jobs)
+            tf.config.threading.set_inter_op_parallelism_threads(args.jobs)
 
         # Load files
         print("Loading data")
