@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from lib import *
+
 import argparse, json, sys
 import numpy as np
 import tensorflow as tf
@@ -107,7 +109,7 @@ def main(argv):
             training_data = json.load(training_data_file)
 
         print(f"Training on {embedding_type}")
-        x_train, y_train, vocabulary = preprocess_training_set(training_data, embedding_type)
+        x_train, y_train, vocabulary = preprocess_labeled_data(training_data, embedding_type)
 
         if load_path:
             # Load model/checkpoint from file if available
