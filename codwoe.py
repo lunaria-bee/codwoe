@@ -15,6 +15,13 @@ CHECKPOINT_PATH_DEFAULT = 'checkpoints/'
 BATCH_SIZE_DEFAULT = 64
 
 
+class SetJobLimitAction(argparse.Action):
+    '''Action to limit number of threads (jobs) tensorflow can use.'''
+    def __call__(self, parser, namespace, value, option_string=None):
+        tf.config.threading.set_intra_op_parallelism_threads(value)
+        tf.config.threading.set_inter_op_parallelism_threads(value)
+
+
 def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -88,6 +95,7 @@ def parse_args(argv):
     )
     parser.add_argument(
         '-j', '--jobs',
+        action=SetJobLimitAction,
         type=int,
         help="Maximum number of jobs (i.e. threads) to run simultaneously.",
     )
@@ -105,11 +113,11 @@ def train(
         checkpoint_path=CHECKPOINT_PATH_DEFAULT,
         jobs=None,
 ):
-    # TODO reimpliment as parser argument action
-    if args.jobs is not None:
-        tf.config.threading.set_intra_op_parallelism_threads(args.jobs)
-        tf.config.threading.set_inter_op_parallelism_threads(args.jobs)
+    '''Train a model.
 
+    All parameters correspond to command-line arguments.
+
+    '''
     lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
 
     with open(training_data_path) as training_data_file:
@@ -161,11 +169,11 @@ def test(
         batch_size=BATCH_SIZE_DEFAULT,
         jobs=None,
 ):
-    # TODO reimpliment as parser argument action
-    if args.jobs is not None:
-        tf.config.threading.set_intra_op_parallelism_threads(args.jobs)
-        tf.config.threading.set_inter_op_parallelism_threads(args.jobs)
+    '''Test a model.
 
+    All parameters correspond to command-line arguments.
+
+    '''
     # Load files
     print("Loading data")
     model = tf.keras.models.load_model(model_path)
