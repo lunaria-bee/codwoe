@@ -18,6 +18,7 @@ BATCH_SIZE_DEFAULT = 64
 class SetJobLimitAction(argparse.Action):
     '''Action to limit number of threads (jobs) tensorflow can use.'''
     def __call__(self, parser, namespace, value, option_string=None):
+        print("Setting job limit")
         tf.config.threading.set_intra_op_parallelism_threads(value)
         tf.config.threading.set_inter_op_parallelism_threads(value)
 
@@ -66,6 +67,12 @@ def parse_args(argv):
             default=CHECKPOINT_PATH_DEFAULT,
             help=f"Path to checkpoint output directory. Default='{CHECKPOINT_PATH_DEFAULT}'.",
         )
+        parser.add_argument(
+            '--batch-input',
+            action='store_true',
+            help=("Process input in batches. By default, only the model's output and"
+                  + " hidden layers are batched."),
+        )
 
     elif args.subcommand == 'test':
         parser.add_argument(
@@ -107,6 +114,7 @@ def train(
         training_data_path='',
         embedding_type='',
         batch_size=BATCH_SIZE_DEFAULT,
+        batch_input=False,
         epochs=EPOCHS_DEFAULT,
         load_path=None,
         output_path=OUTPUT_PATH_DEFAULT,
@@ -124,7 +132,15 @@ def train(
         training_data = json.load(training_data_file)
 
     print(f"Training on {embedding_type}")
-    x_train, y_train, vocabulary = preprocess_labeled_data(training_data, embedding_type)
+    embeddings, glosses, vocabulary = preprocess_labeled_data(training_data, embedding_type)
+    if batch_input:
+        sequence = CodwoeTrainingSequence(embeddings, glosses, vocabulary, batch_size)
+        x_shape = sequence.x_shape
+        y_shape = sequence.y_shape
+    else:
+        x_train, y_train = make_xy_matrices(embeddings, glosses, vocabulary)
+        x_shape = x_train.shape
+        y_shape = y_train.shape
 
     if load_path:
         # Load model/checkpoint from file if available
@@ -135,13 +151,13 @@ def train(
         print("Building model")
 
         model = tf.keras.models.Sequential()
-        model.add(tf.keras.layers.LSTM(32, input_shape=(x_train.shape[1], x_train.shape[2])))
-        model.add(tf.keras.layers.RepeatVector(y_train.shape[1]))
+        model.add(tf.keras.layers.LSTM(32, input_shape=(x_shape[1], x_shape[2])))
+        model.add(tf.keras.layers.RepeatVector(y_shape[1]))
         model.add(tf.keras.layers.Dense(len(vocabulary), activation='softmax'))
         model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
 
-    print(f"x dim: {x_train.shape}")
-    print(f"y dim: {y_train.shape}")
+    print(f"x dim: {x_shape}")
+    print(f"y dim: {y_shape}")
     model.summary()
 
     print("Fitting model")
@@ -157,7 +173,14 @@ def train(
     ]
     if batch_size == 0:
         batch_size = x_train.shape[0]
-    model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, callbacks=callbacks)
+
+    if batch_input:
+        print("Fitting with batched input")
+        model.fit(sequence, epochs=epochs, callbacks=callbacks)
+    else:
+        print("Fitting with full input")
+        model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, callbacks=callbacks)
+
     model.save(f'{output_path}/{lang}-{embedding_type}-model-{timestr}.h5')
 
 
@@ -263,12 +286,15 @@ def test(
 
 def main(argv):
     args = parse_args(argv)
+    subcommand =  args.subcommand
+    args_dict = vars(args)
+    args_dict.pop('subcommand')
 
-    if args.subcommand == 'train':
-        train(**vars(args))
+    if subcommand == 'train':
+        train(**args_dict)
 
-    elif args.subcommand == 'test':
-        test(**vars(args))
+    elif subcommand == 'test':
+        test(**args_dict)
 
 
 if __name__ == '__main__':
