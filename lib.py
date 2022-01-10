@@ -2,6 +2,8 @@ import math
 import numpy as np
 import tensorflow as tf
 
+from gensim.models import Word2Vec
+
 
 GLOSS_START = '<g>'
 GLOSS_END = '</g>'
@@ -59,6 +61,33 @@ class CodwoeTrainingSequence(tf.keras.utils.Sequence):
     @property
     def y_shape(self):
         return (len(self._glosses), self._max_gloss_len-1, 1)
+
+
+def word2vec(dataset, batch_size=10000, jobs=3):
+    '''TODO'''
+    preprocessed_glosses = []
+    max_gloss_len = 0
+    v = set([GLOSS_START, GLOSS_END, GLOSS_UNK])
+    for entry in dataset:
+        new_gloss = entry['gloss'].lower().split()
+        preprocessed_glosses.append(new_gloss)
+
+        if len(new_gloss) > max_gloss_len:
+            max_gloss_len = len(new_gloss)
+
+        v = v.union(set(new_gloss))
+
+    m = Word2Vec(
+        preprocessed_glosses,
+        min_count=1,
+        vector_size=128,
+        window=max_gloss_len,
+        batch_words=batch_size,
+        workers=jobs,
+    )
+    v = [GLOSS_EMPTY] + sorted(list(v))
+
+    return m, v
 
 
 def preprocess_labeled_data(

@@ -2,7 +2,7 @@
 
 from lib import *
 
-import argparse, json, sys
+import argparse, json, multiprocessing, sys
 import numpy as np
 import tensorflow as tf
 
@@ -10,12 +10,14 @@ from datetime import datetime
 from pathlib import Path
 
 
-SUBCOMMAND_CHOICES = ('train', 'test')
+SUBCOMMAND_CHOICES = ('pretrain', 'train', 'test')
 EMBEDDING_TYPE_CHOICES = ('char', 'electra', 'sgns')
 EPOCHS_DEFAULT = 20
 OUTPUT_PATH_DEFAULT = './'
+PRETRAINING_PATH_DEFAULT = 'pretrain/'
 CHECKPOINT_PATH_DEFAULT = 'checkpoints/'
 BATCH_SIZE_DEFAULT = 64
+WORD2VEC_MAX_BATCH_SIZE = 10000
 
 
 class SetJobLimitAction(argparse.Action):
@@ -36,7 +38,29 @@ def parse_args(argv):
     )
     args = parser.parse_args(argv[1:2]) # parse subcommand
 
-    if args.subcommand == 'train':
+    if args.subcommand == 'pretrain':
+        parser.add_argument(
+            'training_data_path',
+            type=Path,
+            help="Path to training data.",
+        )
+        parser.add_argument(
+            '-p', '--pretraining-output',
+            dest='pretraining_path',
+            type=Path,
+            default=PRETRAINING_PATH_DEFAULT,
+            help=f"Path to pretraining output directory. Default='{PRETRAINING_PATH_DEFAULT}'.",
+        )
+        parser.add_argument(
+            '--batch_pretraining',
+            action='store_true',
+            help=("Batch pretraining data. Pretraining is much less memory-intensive than"
+                  + " training, and so is \"unbatched\" by default. (More precisely,"
+                  + " without this argument, the maximum word2vec batch size of 10,000 is"
+                  + " used regardless of the -b/--batch-size setting.)"),
+        )
+
+    elif args.subcommand == 'train':
         parser.add_argument(
             'training_data_path',
             type=Path,
@@ -75,10 +99,25 @@ def parse_args(argv):
             help=f"Path to checkpoint output directory. Default='{CHECKPOINT_PATH_DEFAULT}'.",
         )
         parser.add_argument(
+            '-p', '--pretrain-output',
+            dest='pretrain_path',
+            type=Path,
+            default=PRETRAINING_PATH_DEFAULT,
+            help=f"Path to pretraining output directory. Default='{PRETRAIN_PATH_DEFAULT}'.",
+        )
+        parser.add_argument(
             '--batch-input',
             action='store_true',
             help=("Process input in batches. By default, only the model's output and"
                   + " hidden layers are batched."),
+        )
+        parser.add_argument(
+            '--batch_pretraining',
+            action='store_true',
+            help=("Batch pretraining data. Pretraining is much less memory-intensive than"
+                  + " training, and so is \"unbatched\" by default. (More precisely,"
+                  + " without this argument, the maximum word2vec batch size of 10,000 is"
+                  + " used regardless of the -b/--batch-size setting.)"),
         )
 
     elif args.subcommand == 'test':
@@ -120,15 +159,42 @@ def parse_args(argv):
     return parser.parse_args(argv[1:])
 
 
+def pretrain(
+        training_data_path='',
+        pretraining_path=PRETRAINING_PATH_DEFAULT,
+        batch_pretraining=False,
+        batch_size=WORD2VEC_MAX_BATCH_SIZE,
+        jobs=None,
+):
+    '''TODO'''
+    if not batch_pretraining:
+        batch_size = WORD2VEC_MAX_BATCH_SIZE
+
+    if jobs is None:
+        jobs = multiprocessing.cpu_count()
+
+    lang = training_data_path.parts[-1].split('.')[0]
+
+    with open(training_data_path) as training_data_file:
+        training_data = json.load(training_data_file)
+
+    print("Pretraining")
+    pretraining_model, vocabulary = word2vec(training_data, batch_size, jobs)
+    pretraining_path.mkdir(exist_ok=True)
+    pretraining_model.save(f'{pretraining_path}/{lang}.embeddings.pickle')
+
+
 def train(
         training_data_path='',
         embedding_type='',
         batch_size=BATCH_SIZE_DEFAULT,
         batch_input=False,
+        batch_pretraining=False,
         epochs=EPOCHS_DEFAULT,
         load_path=None,
         output_path=OUTPUT_PATH_DEFAULT,
         checkpoint_path=CHECKPOINT_PATH_DEFAULT,
+        pretraining_path=PRETRAINING_PATH_DEFAULT,
         jobs=None,
 ):
     '''Train a model.
@@ -140,6 +206,11 @@ def train(
 
     with open(training_data_path) as training_data_file:
         training_data = json.load(training_data_file)
+
+    # Automatically pretrain, if necessary
+    embeddings_path = Path(f'{pretraining_path}/{lang}.embeddings.pickle')
+    if not embeddings_path.is_file():
+        pretrain(training_data_path, pretraining_path, batch_pretraining, batch_size, jobs)
 
     print(f"Training on {embedding_type}")
     embeddings, glosses, vocabulary = preprocess_labeled_data(training_data, embedding_type)
@@ -300,7 +371,10 @@ def main(argv):
     args_dict = vars(args)
     args_dict.pop('subcommand')
 
-    if subcommand == 'train':
+    if subcommand == 'pretrain':
+        pretrain(**args_dict)
+
+    elif subcommand == 'train':
         train(**args_dict)
 
     elif subcommand == 'test':
