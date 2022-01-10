@@ -9,6 +9,8 @@ import tensorflow as tf
 from datetime import datetime
 
 
+SUBCOMMAND_CHOICES = ('train', 'test')
+EMBEDDING_TYPE_CHOICES = ('char', 'electra', 'sgns')
 EPOCHS_DEFAULT = 20
 OUTPUT_PATH_DEFAULT = './'
 CHECKPOINT_PATH_DEFAULT = 'checkpoints/'
@@ -28,8 +30,8 @@ def parse_args(argv):
     parser.add_argument(
         'subcommand',
         metavar='subcommand',
-        choices=('train', 'test'),
-        help="Must be one of 'train'|'test'.",
+        choices=SUBCOMMAND_CHOICES,
+        help=f"Must be one of {SUBCOMMAND_CHOICES}.",
     )
     args = parser.parse_args(argv[1:2]) # parse subcommand
 
@@ -41,8 +43,8 @@ def parse_args(argv):
         parser.add_argument(
             'embedding_type',
             metavar='embedding_type',
-            choices=('char', 'electra', 'sgns'),
-            help="Must be one of 'char'|'electra'|'sgns'.",
+            choices=EMBEDDING_TYPE_CHOICES,
+            help=f"Must be one of {EMBEDDING_TYPE_CHOICES}.",
         )
         parser.add_argument(
             '-e', '--epochs',
