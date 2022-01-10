@@ -96,7 +96,7 @@ def parse_args(argv):
         )
 
     parser.add_argument(
-        '-b', '--batch_size',
+        '-b', '--batch-size',
         type=int,
         default=BATCH_SIZE_DEFAULT,
         help=(f"Size of input batches to model. Set to 0 to disable batching (NOT"
