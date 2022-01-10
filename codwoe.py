@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 
 from datetime import datetime
+from pathlib import Path
 
 
 SUBCOMMAND_CHOICES = ('train', 'test')
@@ -38,6 +39,7 @@ def parse_args(argv):
     if args.subcommand == 'train':
         parser.add_argument(
             'training_data_path',
+            type=Path,
             help="Path to training data.",
         )
         parser.add_argument(
@@ -54,18 +56,21 @@ def parse_args(argv):
         )
         parser.add_argument(
             '-l', '--load',
+            type=Path,
             dest='load_path',
             help="Path to existing model or checkpoint from which to begin training.",
         )
         parser.add_argument(
             '-o', '--output',
             dest='output_path',
+            type=Path,
             default=OUTPUT_PATH_DEFAULT,
             help=f"Path to model output directory. Default='{OUTPUT_PATH_DEFAULT}'.",
         )
         parser.add_argument(
             '-c', '--checkpoint-output',
             dest='checkpoint_path',
+            type=Path,
             default=CHECKPOINT_PATH_DEFAULT,
             help=f"Path to checkpoint output directory. Default='{CHECKPOINT_PATH_DEFAULT}'.",
         )
@@ -79,14 +84,17 @@ def parse_args(argv):
     elif args.subcommand == 'test':
         parser.add_argument(
             'dev_data_path',
+            type=Path,
             help="Path to dev test data.",
         )
         parser.add_argument(
             'training_data_path',
+            type=Path,
             help="Path to training data.",
         )
         parser.add_argument(
             'model_path',
+            type=Path,
             help="Path to model.",
         )
         parser.add_argument(
@@ -128,7 +136,7 @@ def train(
     All parameters correspond to command-line arguments.
 
     '''
-    lang = training_data_path.split('/')[-1].split('.')[0] # TODO use Path for portability
+    lang = training_data_path.parts[-1].split('.')[0]
 
     with open(training_data_path) as training_data_file:
         training_data = json.load(training_data_file)
